@@ -2548,7 +2548,7 @@ body.dark-mode .dropdown-option.selected {
           populateAdminCustomSelect(allUsersList, selfUserName, 'history');
           
           populateAdminDropdown(allUsersList, selfUserName, 'reporting-line-user', 'Select a user');
-          populateSupervisorDropdown(allAdminsList, 'reporting-line-supervisor');
+          populateAdminDropdown(allAdminsList, selfUserName, 'reporting-line-supervisor', '-- Select Supervisor --');
           populateAdminDropdown(allUsersList, selfUserName, 'movement-history-user', 'Select your subordinate...');
           
           populateAdminDropdown(allUsersList, selfUserName, 'coaching-agent-select', 'Select an agent');
@@ -4786,21 +4786,48 @@ function populateHistoryReport(data) {
       }
 
       /**
-       * Called when the 'Coaching' tab is clicked.
-       */
-      function loadMyCoaching() {
-        setStatus('coaching-list-status', 'processing', 'Loading coaching history...');
-        // *** NEW: Hide export button while loading ***
-        document.getElementById('export-coaching-btn').style.display = 'none';
-        lastCoachingData = [];
-        
-        google.script.run
-          .withSuccessHandler(populateMyCoaching)
-          .withFailureHandler(err => {
-            setStatus('coaching-list-status', 'error', err.message);
-          })
-          .webGetCoachingHistory(null);
+ * LOAD COACHING TAB
+ * 1. Fetches History
+ * 2. Fetches Correct Hierarchy for Dropdown
+ */
+function loadMyCoaching() {
+  setStatus('coaching-list-status', 'processing', 'Loading coaching data...');
+  document.getElementById('export-coaching-btn').style.display = 'none';
+  lastCoachingData = [];
+  
+  // 1. Load History (Existing Logic)
+  google.script.run
+    .withSuccessHandler(populateMyCoaching)
+    .withFailureHandler(err => {
+      setStatus('coaching-list-status', 'error', err.message);
+    })
+    .webGetCoachingHistory(null);
+
+  // 2. Load Dropdown (NEW: Hierarchy Aware)
+  // Only fetch if user has coaching permissions
+  if (selfRole === 'admin' || selfRole === 'superadmin' || selfRole === 'manager') {
+      const dropdownContainer = document.getElementById('coaching-agent-select-container');
+      if (dropdownContainer) {
+          // Show a loading state in the dropdown
+          dropdownContainer.innerHTML = '<span style="font-size:0.8rem; color:#666;">Loading team...</span>';
+          
+          google.script.run
+            .withSuccessHandler(users => {
+               if (users.length === 0) {
+                   dropdownContainer.innerHTML = '<span style="font-size:0.8rem; color:#666;">No subordinates found.</span>';
+               } else {
+                   // Use the new component renderer we built in Part 4
+                   populateAdminDropdown(users, selfUserName, 'coaching-agent-select', 'Select User to Coach');
+               }
+            })
+            .withFailureHandler(err => {
+               console.error("Failed to load coaching targets", err);
+               dropdownContainer.innerHTML = '<span style="color:red;">Error loading team</span>';
+            })
+            .webGetCoachableUsers();
       }
+  }
+}
 
       /**
        * Renders the list of past coaching sessions.
