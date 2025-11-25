@@ -5555,6 +5555,57 @@ function checkFinancialPermission(email) {
 }
 
 /**
+ * PHASE 6.5: COACHING HIERARCHY FIX
+ * Returns a list of {name, email} for users the current user is allowed to coach.
+ * - Superadmin: Returns All Users
+ * - Admin/Manager: Returns their full downstream hierarchy (Direct + Indirect)
+ * - Agent: Returns empty list
+ */
+function webGetCoachableUsers() {
+  try {
+    const userEmail = Session.getActiveUser().getEmail().toLowerCase();
+    const ss = getSpreadsheet();
+    const userData = getUserDataFromDb(ss);
+    const userRole = userData.emailToRole[userEmail];
+
+    let targetEmails = new Set();
+
+    if (userRole === 'superadmin') {
+       // Superadmins can coach everyone
+       userData.userList.forEach(u => targetEmails.add(u.email));
+    } 
+    else if (userRole === 'admin' || userRole === 'manager' || userRole === 'financial_manager') {
+       // Managers coach their hierarchy
+       // Reuse the existing hierarchy walker
+       const hierarchyEmails = webGetAllSubordinateEmails(userEmail); 
+       hierarchyEmails.forEach(e => targetEmails.add(e));
+       
+       // Remove the manager themselves from the list (optional, but usually you coach others)
+       if (targetEmails.has(userEmail)) targetEmails.delete(userEmail);
+    } 
+    else {
+       return []; // Agents don't coach
+    }
+
+    // Map emails to Name/Email objects for the frontend dropdown
+    const result = [];
+    targetEmails.forEach(email => {
+       const u = userData.userList.find(user => user.email === email);
+       if (u) {
+         result.push({ name: u.name, email: u.email });
+       }
+    });
+
+    // Sort Alphabetically
+    return result.sort((a, b) => a.name.localeCompare(b.name));
+
+  } catch (e) {
+    Logger.log("webGetCoachableUsers Error: " + e.message);
+    return [];
+  }
+}
+
+/**
  * 📌 MASTER DB FIXER
  * Run this ONCE to create missing sheets and add missing columns to all active sheets.
  */
